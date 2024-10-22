@@ -112,7 +112,7 @@ history = model.fit(
 # Save the final model
 model.save('DecideNet_mall.h5')
 
-# Visualization for Figure 7
+# Visualization for Figure 
 def visualize_density_maps(image, regression_map, detection_map, combined_map):
     plt.figure(figsize=(12, 4))
     plt.subplot(1, 3, 1)
@@ -134,7 +134,7 @@ detection_map = regression_map  # Replace with real detection output for your da
 combined_map = regression_map  # Replace with attention-combined map for real output
 visualize_density_maps(example_image[..., 0], regression_map, detection_map, combined_map)
 
-# Evaluation for Table 4
+# Evaluation for table
 def evaluate_model():
     reg_mae = maaae(y_val, regression_map).numpy()
     reg_mse = mssse(y_val, regression_map).numpy()
@@ -149,7 +149,7 @@ def evaluate_model():
 
 evaluate_model()
 
-# Plot Figure 6
+# Plot Figure 
 def plot_predictions_vs_ground_truth():
     predicted_counts_regression = [np.sum(m) for m in regression_map]
     predicted_counts_detection = [np.sum(m) for m in detection_map]  # Replace with detection predictions
