@@ -38,3 +38,7 @@ Fig Predicted crowd counts against the truth.
 Notes
 The default configuration has been set to a constant learning rate (lr=5e-3) that trains for 50 epochs. You may change it in the build_model() function if you wish to reduce the value of the learning rates or train for more epochs to get the best result with minimal risk of overfitting.
 The model architecture and loss functions are designed to mirror DecideNet closely as described in the paper, but often hyperparameter tuning beyond what is reported there will be necessary to achieve best results on individual data sets.
+Notes:
+Replace dummy detection maps with real detection results for fair evaluation
+Adjust the paths according to your dataset structure if needed
+Tune hyperparameters such as epochs and learning rate to appropriately maximise performance
