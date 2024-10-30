@@ -2,7 +2,6 @@ import os
 import numpy as np
 import cv2
 import scipy.io as sio
-import keras
 from keras.models import Model
 from keras.layers import Input, Conv2D, MaxPooling2D, Concatenate, Add, Activation
 from keras.optimizers import Adam
@@ -18,7 +17,6 @@ gt_path = os.path.join(dataset_path, 'mall_gt.mat')
 # Load and Prepare Data
 def data_preparation():
     print('Loading data...')
-    
     # Load images
     frame_files = sorted([f for f in os.listdir(frames_path) if f.endswith('.jpg')])
     images = [cv2.imread(os.path.join(frames_path, file), 0) for file in frame_files]
@@ -112,7 +110,7 @@ history = model.fit(
 # Save the final model
 model.save('DecideNet_mall.h5')
 
-# Visualization for Figure 
+# Visualization for Density Maps (Figure 7)
 def visualize_density_maps(image, regression_map, detection_map, combined_map):
     plt.figure(figsize=(12, 4))
     plt.subplot(1, 3, 1)
@@ -129,31 +127,38 @@ def visualize_density_maps(image, regression_map, detection_map, combined_map):
 # Example visualization
 example_idx = 0
 example_image = x_val[example_idx]
-regression_map = model.predict([example_image[np.newaxis, ...], example_image[np.newaxis, ...]])[0, ..., 0]
-detection_map = regression_map  # Replace with real detection output for your dataset
-combined_map = regression_map  # Replace with attention-combined map for real output
+regression_map = model.predict([example_image[np.newaxis, ...], np.zeros_like(example_image)[np.newaxis, ...]])[0, ..., 0]
+detection_map = model.predict([np.zeros_like(example_image)[np.newaxis, ...], example_image[np.newaxis, ...]])[0, ..., 0]
+combined_map = model.predict([example_image[np.newaxis, ...], example_image[np.newaxis, ...]])[0, ..., 0]
 visualize_density_maps(example_image[..., 0], regression_map, detection_map, combined_map)
 
-# Evaluation for table
+# Evaluation for table (Table 4)
 def evaluate_model():
-    reg_mae = maaae(y_val, regression_map).numpy()
-    reg_mse = mssse(y_val, regression_map).numpy()
-    det_mae = reg_mae  # Replace with actual detection branch evaluation
-    det_mse = reg_mse  # Replace with actual detection branch evaluation
-    final_mae = reg_mae  # Replace with final output evaluation
-    final_mse = reg_mse  # Replace with final output evaluation
+    # Model predictions
+    reg_predictions = model.predict([x_val, np.zeros_like(x_val)])  # Only regression
+    det_predictions = model.predict([np.zeros_like(x_val), x_val])  # Only detection
+    combined_predictions = model.predict([x_val, x_val])  # Combined
 
+    # Calculate metrics
+    reg_mae = K.eval(maaae(y_val, reg_predictions))
+    reg_mse = K.eval(mssse(y_val, reg_predictions))
+    det_mae = K.eval(maaae(y_val, det_predictions))
+    det_mse = K.eval(mssse(y_val, det_predictions))
+    final_mae = K.eval(maaae(y_val, combined_predictions))
+    final_mse = K.eval(mssse(y_val, combined_predictions))
+
+    # Output results
     print(f"Regression-only MAE: {reg_mae}, MSE: {reg_mse}")
     print(f"Detection-only MAE: {det_mae}, MSE: {det_mse}")
     print(f"Combined Model MAE: {final_mae}, MSE: {final_mse}")
 
 evaluate_model()
 
-# Plot Figure 
+# Plot Predictions vs. Ground Truth (Figure 6)
 def plot_predictions_vs_ground_truth():
-    predicted_counts_regression = [np.sum(m) for m in regression_map]
-    predicted_counts_detection = [np.sum(m) for m in detection_map]  # Replace with detection predictions
-    predicted_counts_combined = [np.sum(m) for m in combined_map]  # Replace with combined predictions
+    predicted_counts_regression = [np.sum(m) for m in reg_predictions]
+    predicted_counts_detection = [np.sum(m) for m in det_predictions]
+    predicted_counts_combined = [np.sum(m) for m in combined_predictions]
     ground_truth_counts = [np.sum(y) for y in y_val]
 
     sorted_indices = np.argsort(ground_truth_counts)
@@ -174,3 +179,4 @@ def plot_predictions_vs_ground_truth():
     plt.show()
 
 plot_predictions_vs_ground_truth()
+
