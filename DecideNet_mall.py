@@ -9,10 +9,17 @@ from keras.callbacks import ReduceLROnPlateau, TensorBoard
 from keras import backend as K
 import matplotlib.pyplot as plt
 
-# Setup paths
-dataset_path = '/content/extracted_mall_dataset/'
-frames_path = os.path.join(dataset_path, 'frames/')
-gt_path = os.path.join(dataset_path, 'mall_gt.mat')
+# Define paths
+dataset_path = '/content/drive/MyDrive/mall_dataset'
+frames_path = os.path.join(dataset_path, 'frames')
+feat_file = os.path.join(dataset_path, 'mall_feat.mat')
+gt_file = os.path.join(dataset_path, 'mall_gt.mat')
+
+# Verify files
+image_files = [os.path.join(frames_path, f) for f in os.listdir(frames_path) if f.endswith('.jpg')]
+print("First few image files:", image_files[:5])
+print("Features file exists:", os.path.exists(feat_file))
+print("Ground truth file exists:", os.path.exists(gt_file))
 
 # Load and Prepare Data
 def data_preparation():
@@ -24,7 +31,7 @@ def data_preparation():
     images = np.array([np.expand_dims(img, axis=-1) for img in images])
     
     # Load ground-truth annotations
-    gt_data = sio.loadmat(gt_path)
+    gt_data = sio.loadmat(gt_file)
     density_maps = gt_data['density_map']  # Assuming density maps are stored in 'density_map'
     
     print('Data loaded.')
@@ -57,8 +64,8 @@ def customLoss(y_true, y_pred):
 # Define the DecideNet architecture
 def build_decidenet():
     # Inputs
-    inputs_image = Input(shape=(None, None, 1))  # For regression (RegNet)
-    inputs_detection = Input(shape=(None, None, 1))  # For detection (DetNet)
+    inputs_image = Input(shape=(None, None, 1))
+    inputs_detection = Input(shape=(None, None, 1))
 
     # Regression-based density estimation (RegNet)
     reg_conv = Conv2D(24, (5, 5), padding='same', activation='relu')(inputs_image)
@@ -75,12 +82,12 @@ def build_decidenet():
     # Attention Mechanism (QualityNet)
     attention_input = Concatenate(axis=3)([reg_conv, det_conv, inputs_image])
     attention_conv = Conv2D(16, (3, 3), padding='same', activation='relu')(attention_input)
-    attention_conv = Conv2D(1, (1, 1), padding='same', activation='sigmoid')(attention_conv)  # Outputs attention weights
+    attention_conv = Conv2D(1, (1, 1), padding='same', activation='sigmoid')(attention_conv)
 
     # Combine results based on attention
     final_output = Add()([
-        reg_conv * (1 - attention_conv),  # Regression weighted by (1 - attention)
-        det_conv * attention_conv         # Detection weighted by attention
+        reg_conv * (1 - attention_conv),
+        det_conv * attention_conv
     ])
     
     # Create the model
@@ -100,7 +107,7 @@ callbacks_list = [reduce_lr, tensorboard]
 
 # Train the model
 history = model.fit(
-    [x_train, x_train], y_train,  # Note: Detection inputs are same as training images for demo
+    [x_train, x_train], y_train,
     epochs=50,
     batch_size=32,
     callbacks=callbacks_list,
@@ -110,7 +117,7 @@ history = model.fit(
 # Save the final model
 model.save('DecideNet_mall.h5')
 
-# Visualization for Density Maps (Figure 7)
+# Visualization for Density Maps
 def visualize_density_maps(image, regression_map, detection_map, combined_map):
     plt.figure(figsize=(12, 4))
     plt.subplot(1, 3, 1)
@@ -132,14 +139,12 @@ detection_map = model.predict([np.zeros_like(example_image)[np.newaxis, ...], ex
 combined_map = model.predict([example_image[np.newaxis, ...], example_image[np.newaxis, ...]])[0, ..., 0]
 visualize_density_maps(example_image[..., 0], regression_map, detection_map, combined_map)
 
-# Evaluation for table (Table 4)
+# Evaluation for table
 def evaluate_model():
-    # Model predictions
-    reg_predictions = model.predict([x_val, np.zeros_like(x_val)])  # Only regression
-    det_predictions = model.predict([np.zeros_like(x_val), x_val])  # Only detection
-    combined_predictions = model.predict([x_val, x_val])  # Combined
+    reg_predictions = model.predict([x_val, np.zeros_like(x_val)])
+    det_predictions = model.predict([np.zeros_like(x_val), x_val])
+    combined_predictions = model.predict([x_val, x_val])
 
-    # Calculate metrics
     reg_mae = K.eval(maaae(y_val, reg_predictions))
     reg_mse = K.eval(mssse(y_val, reg_predictions))
     det_mae = K.eval(maaae(y_val, det_predictions))
@@ -147,14 +152,13 @@ def evaluate_model():
     final_mae = K.eval(maaae(y_val, combined_predictions))
     final_mse = K.eval(mssse(y_val, combined_predictions))
 
-    # Output results
     print(f"Regression-only MAE: {reg_mae}, MSE: {reg_mse}")
     print(f"Detection-only MAE: {det_mae}, MSE: {det_mse}")
     print(f"Combined Model MAE: {final_mae}, MSE: {final_mse}")
 
 evaluate_model()
 
-# Plot Predictions vs. Ground Truth (Figure 6)
+# Plot Predictions vs. Ground Truth
 def plot_predictions_vs_ground_truth():
     predicted_counts_regression = [np.sum(m) for m in reg_predictions]
     predicted_counts_detection = [np.sum(m) for m in det_predictions]
@@ -175,8 +179,9 @@ def plot_predictions_vs_ground_truth():
     plt.xlabel('Sorted Image Index')
     plt.ylabel('Crowd Count')
     plt.legend()
-    plt.title('Prediction vs. Ground Truth (Figure 6)')
+    plt.title('Prediction vs. Ground Truth')
     plt.show()
 
 plot_predictions_vs_ground_truth()
+
 
