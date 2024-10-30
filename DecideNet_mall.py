@@ -8,12 +8,14 @@ from keras.optimizers import Adam
 from keras.callbacks import ReduceLROnPlateau, TensorBoard
 from keras import backend as K
 import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
 # Define paths
 dataset_path = '/content/drive/MyDrive/mall_dataset'
 frames_path = os.path.join(dataset_path, 'frames')
 feat_file = os.path.join(dataset_path, 'mall_feat.mat')
-gt_file = os.path.join(dataset_path, 'mall_gt.mat')
+gt_file = os.path.join(dataset_path, 'mall_gt_with_density.mat')
 
 # Verify files
 image_files = [os.path.join(frames_path, f) for f in os.listdir(frames_path) if f.endswith('.jpg')]
@@ -26,12 +28,14 @@ def data_preparation():
     print('Loading data...')
     # Load images
     frame_files = sorted([f for f in os.listdir(frames_path) if f.endswith('.jpg')])
-    images = [cv2.imread(os.path.join(frames_path, file), 0) for file in frame_files]
+    images = [cv2.imread(os.path.join(frames_path, file), cv2.IMREAD_GRAYSCALE) for file in frame_files]
     images = [(img - 127.5) / 128 for img in images]  # Normalize images
     images = np.array([np.expand_dims(img, axis=-1) for img in images])
     
     # Load ground-truth annotations
     gt_data = sio.loadmat(gt_file)
+    print("Keys in ground truth data:", gt_data.keys())
+
     density_maps = gt_data['density_map']  # Assuming density maps are stored in 'density_map'
     
     print('Data loaded.')
@@ -40,28 +44,46 @@ def data_preparation():
 # Load data
 x_data, y_data = data_preparation()
 
-# Split data (80% train, 20% validation)
-split_idx = int(0.8 * len(x_data))
-x_train, x_val = x_data[:split_idx], x_data[split_idx:]
-y_train, y_val = y_data[:split_idx], y_data[split_idx:]
+# Split data (800 training, 100 validation from training, 1200 testing)
+x_train = x_data[:800]
+y_train = y_data[:800]
+
+# Randomly select 100 images for validation from the training set
+indices = np.random.choice(range(800), 100, replace=False)
+x_val = x_train[indices]
+y_val = y_train[indices]
+
+# Remaining 1200 images are for testing
+x_test = x_data[800:]
+y_test = y_data[800:]
+
+# Data Augmentation
+data_gen = ImageDataGenerator(
+    rotation_range=10,
+    width_shift_range=0.1,
+    height_shift_range=0.1,
+    zoom_range=0.1,
+    horizontal_flip=True,
+    fill_mode='nearest'
+)
 
 # Define custom loss functions
 def maaae(y_true, y_pred):
     s = K.sum(K.sum(y_true, axis=1), axis=1)
     s1 = K.sum(K.sum(y_pred, axis=1), axis=1)
-    return K.mean(abs(s - s1))
+    return K.mean(K.abs(s - s1))
 
 def mssse(y_true, y_pred):
     s = K.sum(K.sum(y_true, axis=1), axis=1)
     s1 = K.sum(K.sum(y_pred, axis=1), axis=1)
-    return K.mean((s - s1) ** 2)
+    return K.mean(K.square(s - s1))
 
 def customLoss(y_true, y_pred):
     loss1 = mssse(y_true, y_pred)
-    loss2 = K.mean((y_true - y_pred) ** 2)
+    loss2 = K.mean(K.square(y_true - y_pred))
     return 0.7 * loss1 + 0.3 * loss2
 
-# Define the DecideNet architecture
+# Define the DecideNet architecture with enhanced QualityNet
 def build_decidenet():
     # Inputs
     inputs_image = Input(shape=(None, None, 1))
@@ -79,16 +101,14 @@ def build_decidenet():
     det_conv = Conv2D(32, (5, 5), padding='same', activation='relu')(det_conv)
     det_conv = Conv2D(1, (1, 1), padding='same')(det_conv)
 
-    # Attention Mechanism (QualityNet)
+    # Enhanced Attention Mechanism (QualityNet)
     attention_input = Concatenate(axis=3)([reg_conv, det_conv, inputs_image])
-    attention_conv = Conv2D(16, (3, 3), padding='same', activation='relu')(attention_input)
+    attention_conv = Conv2D(32, (3, 3), padding='same', activation='relu')(attention_input)
+    attention_conv = Conv2D(16, (3, 3), padding='same', activation='relu')(attention_conv)
     attention_conv = Conv2D(1, (1, 1), padding='same', activation='sigmoid')(attention_conv)
 
     # Combine results based on attention
-    final_output = Add()([
-        reg_conv * (1 - attention_conv),
-        det_conv * attention_conv
-    ])
+    final_output = Add()([reg_conv * (1 - attention_conv), det_conv * attention_conv])
     
     # Create the model
     model = Model(inputs=[inputs_image, inputs_detection], outputs=final_output)
@@ -97,7 +117,7 @@ def build_decidenet():
 # Build and compile the model
 model = build_decidenet()
 model.summary()
-adam = Adam(lr=5e-3)
+adam = Adam(learning_rate=5e-3)
 model.compile(loss=customLoss, optimizer=adam, metrics=[maaae, mssse])
 
 # Training setup
@@ -105,13 +125,12 @@ reduce_lr = ReduceLROnPlateau(monitor='val_maaae', factor=0.90, patience=10, min
 tensorboard = TensorBoard(log_dir='./logs/DecideNet', write_graph=True)
 callbacks_list = [reduce_lr, tensorboard]
 
-# Train the model
+# Train the model with data augmentation
 history = model.fit(
-    [x_train, x_train], y_train,
+    data_gen.flow(x_train, y_train, batch_size=32),
     epochs=50,
-    batch_size=32,
-    callbacks=callbacks_list,
-    validation_data=([x_val, x_val], y_val)
+    validation_data=(x_val, y_val),
+    callbacks=callbacks_list
 )
 
 # Save the final model
@@ -141,20 +160,20 @@ visualize_density_maps(example_image[..., 0], regression_map, detection_map, com
 
 # Evaluation for table
 def evaluate_model():
-    reg_predictions = model.predict([x_val, np.zeros_like(x_val)])
-    det_predictions = model.predict([np.zeros_like(x_val), x_val])
-    combined_predictions = model.predict([x_val, x_val])
+    reg_predictions = model.predict([x_test, np.zeros_like(x_test)])
+    det_predictions = model.predict([np.zeros_like(x_test), x_test])
+    combined_predictions = model.predict([x_test, x_test])
 
-    reg_mae = K.eval(maaae(y_val, reg_predictions))
-    reg_mse = K.eval(mssse(y_val, reg_predictions))
-    det_mae = K.eval(maaae(y_val, det_predictions))
-    det_mse = K.eval(mssse(y_val, det_predictions))
-    final_mae = K.eval(maaae(y_val, combined_predictions))
-    final_mse = K.eval(mssse(y_val, combined_predictions))
+    reg_mae = K.eval(maaae(y_test, reg_predictions))
+    reg_mse = K.eval(mssse(y_test, reg_predictions))
+    det_mae = K.eval(maaae(y_test, det_predictions))
+    det_mse = K.eval(mssse(y_test, det_predictions))
+    final_mae = K.eval(maaae(y_test, combined_predictions))
+    final_mse = K.eval(mssse(y_test, combined_predictions))
 
-    print(f"Regression-only MAE: {reg_mae}, MSE: {reg_mse}")
-    print(f"Detection-only MAE: {det_mae}, MSE: {det_mse}")
-    print(f"Combined Model MAE: {final_mae}, MSE: {final_mse}")
+    print(f"Regression-only MAE: {reg_mae:.4f}, MSE: {reg_mse:.4f}")
+    print(f"Detection-only MAE: {det_mae:.4f}, MSE: {det_mse:.4f}")
+    print(f"Combined Model MAE: {final_mae:.4f}, MSE: {final_mse:.4f}")
 
 evaluate_model()
 
@@ -163,25 +182,17 @@ def plot_predictions_vs_ground_truth():
     predicted_counts_regression = [np.sum(m) for m in reg_predictions]
     predicted_counts_detection = [np.sum(m) for m in det_predictions]
     predicted_counts_combined = [np.sum(m) for m in combined_predictions]
-    ground_truth_counts = [np.sum(y) for y in y_val]
+    ground_truth_counts = [np.sum(y) for y in y_test]
 
-    sorted_indices = np.argsort(ground_truth_counts)
-    sorted_gt = np.array(ground_truth_counts)[sorted_indices]
-    sorted_pred_reg = np.array(predicted_counts_regression)[sorted_indices]
-    sorted_pred_det = np.array(predicted_counts_detection)[sorted_indices]
-    sorted_pred_comb = np.array(predicted_counts_combined)[sorted_indices]
-
-    plt.figure(figsize=(10, 6))
-    plt.plot(sorted_gt, label='Ground Truth', color='red')
-    plt.plot(sorted_pred_reg, label='Regression Prediction', color='blue')
-    plt.plot(sorted_pred_det, label='Detection Prediction', color='green')
-    plt.plot(sorted_pred_comb, label='Combined Prediction', color='purple')
-    plt.xlabel('Sorted Image Index')
-    plt.ylabel('Crowd Count')
+    plt.figure(figsize=(10, 5))
+    plt.plot(ground_truth_counts, label="Ground Truth Counts", color="black")
+    plt.plot(predicted_counts_regression, label="Regression-only", linestyle='--', color="blue")
+    plt.plot(predicted_counts_detection, label="Detection-only", linestyle=':', color="green")
+    plt.plot(predicted_counts_combined, label="Combined Model", linestyle='-', color="red")
+    plt.xlabel("Test Samples")
+    plt.ylabel("Crowd Count")
     plt.legend()
-    plt.title('Prediction vs. Ground Truth')
+    plt.title("Predicted vs. Ground Truth Counts")
     plt.show()
 
 plot_predictions_vs_ground_truth()
-
-
