@@ -1,44 +1,44 @@
-Dataset Setup Download the Mall Dataset:
-The dataset should have already been extracted in /content/extracted_mall_dataset/ that contains:
-frames/: Directory with images of crowd scenes in a mall.
-mall_gt.mat: Ground truth density annotations.
+DecideNet for Mall Crowd Counting Dataset Setup Download the Mall Dataset : The dataset should already have been extracted in /content/extracted_mall_dataset/ that contains frames/: Directory with images of crowd scenes in a mall. mall_gt.mat : Ground truth density annotations. To Run the Code Step 1: Load and prepare data The code contains the data_preparation function for preparing the dataset to the training process by: End.
+Loading the ground-truth density annotations from mall_gt.mat.
+Step 2: Training
+Running the main code DecideNet_mall.py trains the model DecideNet. It loads the dataset Mall, designs the network architecture, and then automatically trains it:
+The model uses a detection as well as a regression head to train up an attention mechanism which makes adaptively the best selection for a given pixel in an image. It will save as DecideNet_mall.h5.
 
-How to Run the Code 
-Step 1: Load and Prepare Data
-The code consists of a data_preparation function that prepares the dataset for training by:
-Loading images from the frames/ folder
-Normalizing the image data
-Loading the ground-truth density annotations from mall_gt.mat
-Step 2: Train the Model
-Run the main code DecideNet_mall.py for training of model DecideNet. It automatically loads the dataset Mall, designs the network architecture, and trains the model:
-python DecideNet_mall.py
-The model applies both the detection and regression branches to train an attention mechanism which is responsible for adaptively choosing the best estimation for each pixel.
-The trained model will be saved as DecideNet_mall.h5.
-Step 3: Visualization of Density Maps (Figure 7)
-For example, image, one can run the regression-based, detection-based, and final density maps
-python DecideNet_mall.py
-This will print the three density maps side by side:
- 
+Step 3: Visualization of Density Maps Figure 7
+
+For instance, one can call the regressions-based density map by running the commands as
+```
+ DecideNet_mall.py
+It will print side-by-side the three the density map
 Regression-based density map
 Detection-based density map
-Final combined density map (attention-guided)
-Step 4: Evaluate the Model (Table 4)
-Now use the evaluate_model function to give you the Mean Absolute Error and Mean Squared Error for the regression branch, detection branch, and the final combined output. This should print similar results to Table 4 from the DecideNet paper.
-To evaluate the model: python DecideNet_mall.py
-This will compute and print out the MAE and MSE for the two branches as well as the model overall.
-Step 5: Plotting Figure 6 Prediction vs. Ground Truth
-Generate a plot that shows the predicted counts from different branches, compared to the ground-truth counts. Sort images according to crowd count of the ground truth.
-Plot the predictions for RegNet, DetNet, and the combined model versus the ground-truth count.
-This is done automatically when you run the program. python DecideNet_mall.py
+Final attention-guided combined density map
+Model Evaluation (Table 4)
+Now apply the function evaluate_model() to compute and print you the MAE and MSE for each the regression, detection and combined output.
+This would then print a similar answer as in Table 4 found on the paper of DecideNet.
+ 
+
+To make evaluation on model:
+  
+ DecideNet_mall.py
+This will compute and print the MAE and MSE of the two branches as well as the overall model.
+
+Step 5: Figure 6 Prediction vs. Ground Truth Plot
+Produce a plot of predicted counts from all the different branches against ground truth counts. Sort images by ground truth crowd count.
+
+This is done automatically when you run the program:
+
+ DecideNet_mall.py
 Results
-The following results will be obtained:
-Fig Density map visualizations (regression, detection, combined).
-Table Mean absolute error and mean squared error in regression-only and detection-only and the finally combined model.
-Fig Predicted crowd counts against the truth.
+The results are as follows:
+
+Figure: Density map visualizations (regression, detection, combined).
+Table: Mean absolute error and mean squared error in regression-only and detection-only models, and the finally combined model.
+Figure: Predicted crowd counts against the ground truth.
 Notes
-The default configuration has been set to a constant learning rate (lr=5e-3) that trains for 50 epochs. You may change it in the build_model() function if you wish to reduce the value of the learning rates or train for more epochs to get the best result with minimal risk of overfitting.
-The model architecture and loss functions are designed to mirror DecideNet closely as described in the paper, but often hyperparameter tuning beyond what is reported there will be necessary to achieve best results on individual data sets.
-Notes:
-Replace dummy detection maps with real detection results for fair evaluation
-Adjust the paths according to your dataset structure if needed
-Tune hyperparameters such as epochs and learning rate to appropriately maximise performance
+By default, the learning rate configuration has been fixed to constant for 50 epochs at a value of lr=5e-3. To decrease the learning rates values or train longer to acquire the best results with lower risk of overfitting, you could change the build_model() function.
+Model architectures and loss functions are intended to be as close as possible to DecideNet while described in the paper but often hyperparameter tuning beyond reported there will be required to produce the best results on single datasets.
+Additional Notes
+Replace dummy detection maps by real detection results for an honest evaluation.
+Adjust your paths according to your specific dataset structure if necessary
+Tune hyperparameters for epochs and learning rate appropriate to maximize performance.
