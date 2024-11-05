@@ -15,7 +15,7 @@ Loading the ground-truth density annotations from mall_gt.mat
 Resizing and normalizing the images.
 
 Step 2: Training the Model
-Run the top program, DecideNet_mall.py, which:
+Run the top program, EnhancedDecidenet.py, which:
 
 Loads the Mall dataset
 Designs and initializes the DecideNet architecture
@@ -27,7 +27,7 @@ After training, DecideNet_mall.h5 will be saved.
 Density Map Visualization
 Once training completes, density maps for each branch in the network pipeline should be visible.
 Run the following commands in the terminal to visualize:
-python DecideNet_mall.py
+python EnhancedDecidenet.py
 This will output both the regression-based and detection-based density maps, visualized together with the combined, attention-driven density map.
 
 Step 3: Model Evaluation (Table 4)
@@ -37,13 +37,13 @@ Regression Output
 Detection Output
 Combined Output
 Run the following in the terminal to evaluate and print MAE and MSE for each branch and the overall model:
-python DecideNet_mall.py
+python EnhancedDecidenet.py
 
 Step 4: Predicted vs. Ground Truth Plot (Figure 6)
 This step generates a plot that shows, for each branch, the predicted crowd counts alongside the ground truth counts, ordered by value.
 Generate this plot by running:
 
-python DecideNet_mall.py
+python EnhancedDecidenet.py
 
 Output
 The final results include:
